@@ -1,3 +1,65 @@
+## [0.16.9](https://github.com/vuejs/vite/compare/v0.16.8...v0.16.9) (2020-05-23)
+
+
+### Bug Fixes
+
+* public dir should be copied to dist root ([bf2b2a9](https://github.com/vuejs/vite/commit/bf2b2a9c7d66b001260e60d825ae72e8c3e0c301))
+* quote resolved urls in rendered html ([fd68ecf](https://github.com/vuejs/vite/commit/fd68ecfa5c5e74a1a463ed5c91b9fecba356f846))
+
+
+
+## [0.16.8](https://github.com/vuejs/vite/compare/v0.16.7...v0.16.8) (2020-05-23)
+
+
+### Bug Fixes
+
+* defaultRequestToFile should consider optimized modules ([#239](https://github.com/vuejs/vite/issues/239)) ([b5ddcdc](https://github.com/vuejs/vite/commit/b5ddcdcc65f62bf3fd50e487dc2d9bfa61624539))
+* properly resolve file extensions ([aaf61f4](https://github.com/vuejs/vite/commit/aaf61f4d0d6843d0b34c9c75c4dec8a95e95b9d1)), closes [#237](https://github.com/vuejs/vite/issues/237)
+
+
+
+## [0.16.7](https://github.com/vuejs/vite/compare/v0.16.6...v0.16.7) (2020-05-22)
+
+
+### Bug Fixes
+
+* defaultRequestToFile should handle uncached node_modules request ([#230](https://github.com/vuejs/vite/issues/230)) ([7a3e822](https://github.com/vuejs/vite/commit/7a3e822597b94f8440e7436e3cc54a2764fff4eb)), closes [#228](https://github.com/vuejs/vite/issues/228)
+* disable cssCodeSplit in ssr build ([457f1f2](https://github.com/vuejs/vite/commit/457f1f2aca32f968f4ffe822633a2b4c49456fd4))
+* do not attempt to rewrite css urls that are hash fragments ([029de6b](https://github.com/vuejs/vite/commit/029de6b30bfc307d4b02f28703cd8d73a706b1cd))
+* ensure env vairable replacements are efficient for bundle size ([1be6121](https://github.com/vuejs/vite/commit/1be61219d1e253d6edec812ff7828b69d775c093))
+* ensure rewrite middlewares have highest priority ([e741628](https://github.com/vuejs/vite/commit/e74162857ad33788f6fa02a4dca863aa7354fc76))
+* fix entry resolving for packages with explicit exports ([c493629](https://github.com/vuejs/vite/commit/c4936290380891353de0581e432389310147a8e0)), closes [#227](https://github.com/vuejs/vite/issues/227)
+* only apply vite-specific global replacements to non-dep code ([b96ed68](https://github.com/vuejs/vite/commit/b96ed689970a1c0ab87f21c7cdf7d72a12c493c2))
+
+
+### Features
+
+* support built-in css preprocess ([#220](https://github.com/vuejs/vite/issues/220)) ([bef67f5](https://github.com/vuejs/vite/commit/bef67f50a56d190a0cd5fd2bcea94ad2d4f80185))
+* support loading customize env variables from .env file ([#223](https://github.com/vuejs/vite/issues/223)) ([89fe0a9](https://github.com/vuejs/vite/commit/89fe0a9c912cb944e87556ca3cc344c6fac0fc0d)), closes [#213](https://github.com/vuejs/vite/issues/213)
+
+
+
+## [0.16.6](https://github.com/vuejs/vite/compare/v0.16.4...v0.16.6) (2020-05-21)
+
+
+### Bug Fixes
+
+* make sure aliased deps are externaled correctly ([#218](https://github.com/vuejs/vite/issues/218)) ([a1f5488](https://github.com/vuejs/vite/commit/a1f54889a95a24f89804b0fbdfc876cde5615c98))
+* redirect url in case index.html is not present ([8a9710b](https://github.com/vuejs/vite/commit/8a9710b1a90cadfa69889cf00c224ea41ca13a9f))
+* respect cssCodeSplit option ([4a0b6cc](https://github.com/vuejs/vite/commit/4a0b6cc573840f3f74ac4f1b59bc957f1c626a92))
+
+
+
+## [0.16.5](https://github.com/vuejs/vite/compare/v0.16.4...v0.16.5) (2020-05-21)
+
+
+### Bug Fixes
+
+* redirect url in case index.html is not present ([df733d9](https://github.com/vuejs/vite/commit/df733d9cd93ad1d1d01c11b8b7a3a9659a7b9cbf))
+* respect cssCodeSplit option ([3751551](https://github.com/vuejs/vite/commit/375155164ec68c78f07fc57d34cdc477249dc3a2))
+
+
+
 ## [0.16.4](https://github.com/vuejs/vite/compare/v0.16.3...v0.16.4) (2020-05-20)
 
 

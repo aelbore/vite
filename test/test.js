@@ -2,6 +2,7 @@ const fs = require('fs-extra')
 const path = require('path')
 const execa = require('execa')
 const puppeteer = require('puppeteer')
+const moment = require('moment')
 
 jest.setTimeout(100000)
 
@@ -9,7 +10,7 @@ const timeout = (n) => new Promise((r) => setTimeout(r, n))
 
 const binPath = path.resolve(__dirname, '../bin/vite.js')
 const fixtureDir = path.join(__dirname, '../playground')
-const tempDir = path.join(__dirname, 'temp')
+const tempDir = path.join(__dirname, '../temp')
 let devServer
 let browser
 let page
@@ -33,12 +34,6 @@ const getComputedColor = async (selectorOrEl) => {
   )
 }
 
-const navigateFinish = async () => {
-  return await page.waitForNavigation({
-    waitUntil: 'domcontentloaded'
-  })
-}
-
 beforeAll(async () => {
   try {
     await fs.remove(tempDir)
@@ -46,6 +41,7 @@ beforeAll(async () => {
   await fs.copy(fixtureDir, tempDir, {
     filter: (file) => !/dist|node_modules/.test(file)
   })
+  await execa('yarn', { cwd: tempDir })
 })
 
 afterAll(async () => {
@@ -97,8 +93,11 @@ describe('vite', () => {
     test('env variables', async () => {
       expect(await getText('.dev')).toMatch(`__DEV__: ${!isBuild}`)
       expect(await getText('.base')).toMatch(`__BASE__: /`)
-      expect(await getText('.node_env')).toMatch(
+      expect(await getText('.node-env')).toMatch(
         `process.env.NODE_ENV: ${isBuild ? 'production' : 'development'}`
+      )
+      expect(await getText('.customize-env-variable')).toMatch(
+        'process.env.CUSTOM_ENV_VARIABLE: 9527'
       )
     })
 
@@ -106,7 +105,9 @@ describe('vite', () => {
       expect(await getText('.module-resolve-router')).toMatch('ok')
       expect(await getText('.module-resolve-store')).toMatch('ok')
       expect(await getText('.module-resolve-optimize')).toMatch('ok')
+      expect(await getText('.module-resolve-conditional')).toMatch('ok')
       expect(await getText('.index-resolve')).toMatch('ok')
+      expect(await getText('.dot-resolve')).toMatch('ok')
     })
 
     if (!isBuild) {
@@ -349,20 +350,29 @@ describe('vite', () => {
       await expectByPolling(() => getText('.async'), 'should show up')
       expect(await getComputedColor('.async')).toBe('rgb(139, 69, 19)')
     })
+
+    test('rewrite import in optimized deps', async () => {
+      expect(await getText('.test-rewrite-in-optimized')).toMatch(
+        moment(1590231082886).format('MMMM Do YYYY, h:mm:ss a')
+      )
+    })
   }
 
   // test build first since we are going to edit the fixtures when testing dev
   describe('build', () => {
     let staticServer
     beforeAll(async () => {
+      console.log('building...')
       const buildOutput = await execa(binPath, ['build'], {
         cwd: tempDir
       })
       expect(buildOutput.stdout).toMatch('Build completed')
       expect(buildOutput.stderr).toBe('')
+      console.log('build complete. running build tests...')
     })
 
     afterAll(() => {
+      console.log('build test done.')
       if (staticServer) staticServer.close()
     })
 
@@ -408,6 +418,7 @@ describe('vite', () => {
   describe('dev', () => {
     beforeAll(async () => {
       browserLogs.length = 0
+      console.log('starting dev server...')
       // start dev server
       devServer = execa(binPath, {
         cwd: tempDir
@@ -416,11 +427,13 @@ describe('vite', () => {
         devServer.stdout.on('data', (data) => {
           serverLogs.push(data.toString())
           if (data.toString().match('running')) {
+            console.log('dev server running.')
             resolve()
           }
         })
       })
 
+      console.log('launching browser')
       page = await browser.newPage()
       page.on('console', (msg) => {
         browserLogs.push(msg.text())
@@ -433,10 +446,13 @@ describe('vite', () => {
     test('hmr (index.html full-reload)', async () => {
       expect(await getText('title')).toMatch('Vite App')
       // hmr
+      const reload = page.waitForNavigation({
+        waitUntil: 'domcontentloaded'
+      })
       await updateFile('index.html', (content) =>
         content.replace('Vite App', 'Vite App Test')
       )
-      await navigateFinish()
+      await reload
       await expectByPolling(() => getText('title'), 'Vite App Test')
     })
 
@@ -444,10 +460,13 @@ describe('vite', () => {
       await page.goto('http://localhost:3000/test.html')
       expect(await getText('title')).toMatch('Vite App')
       // hmr
+      const reload = page.waitForNavigation({
+        waitUntil: 'domcontentloaded'
+      })
       await updateFile('test.html', (content) =>
         content.replace('Vite App', 'Vite App Test')
       )
-      await navigateFinish()
+      await reload
       await expectByPolling(() => getText('title'), 'Vite App Test')
     })
 
