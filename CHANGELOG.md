@@ -1,3 +1,47 @@
+## [0.16.12](https://github.com/vuejs/vite/compare/v0.16.11...v0.16.12) (2020-05-25)
+
+
+### Bug Fixes
+
+* fix rewrite extension appending for out of root files ([84fcfb6](https://github.com/vuejs/vite/commit/84fcfb66ecd9822ebb9dd56505332acce20da568))
+* use upward search for env files ([4fceaea](https://github.com/vuejs/vite/commit/4fceaea1b60ba71f954796dfc601e91300344d3f))
+
+
+### Features
+
+* support webp as static assets ([5589fa3](https://github.com/vuejs/vite/commit/5589fa3ea51f5442083eb4a31844e23386c89af4))
+
+
+
+## [0.16.11](https://github.com/vuejs/vite/compare/v0.16.10...v0.16.11) (2020-05-25)
+
+
+### Bug Fixes
+
+* fix history fallback when serving non cwd root (fix [#251](https://github.com/vuejs/vite/issues/251)) ([c239067](https://github.com/vuejs/vite/commit/c239067969677bc09ad809baf02495072a38b2ff))
+* fix plain css reference via link (fix [#252](https://github.com/vuejs/vite/issues/252)) ([146a49d](https://github.com/vuejs/vite/commit/146a49d78bd8225f846db8baa4adfa604d4cbf4a))
+* fix unused css filter check on windows ([3486d21](https://github.com/vuejs/vite/commit/3486d2117faac0d83bc093f0c8c21b783b8f9f2d))
+* more graceful handling for packages with no main field ([8816d3b](https://github.com/vuejs/vite/commit/8816d3bca6aef8df11f70f934031178accde5163)), closes [#247](https://github.com/vuejs/vite/issues/247)
+* skip hmr for unused css ([#253](https://github.com/vuejs/vite/issues/253)) ([8f7ee38](https://github.com/vuejs/vite/commit/8f7ee38965327cf15dbb4f2d6f3db6e4b642b635))
+* **build:** should ignore assets hash and query ([#256](https://github.com/vuejs/vite/issues/256)) ([528aad6](https://github.com/vuejs/vite/commit/528aad6b66c407e70bab2012d24a5ca0df30edd5))
+
+
+### Features
+
+* support specify env mode ([#235](https://github.com/vuejs/vite/issues/235)) ([db8b6b2](https://github.com/vuejs/vite/commit/db8b6b23d6e230505b48890cc95e0d8642e98804))
+
+
+
+## [0.16.10](https://github.com/vuejs/vite/compare/v0.16.9...v0.16.10) (2020-05-24)
+
+
+### Bug Fixes
+
+* __DEV__ replace should also apply to vite modules ([7c4b64c](https://github.com/vuejs/vite/commit/7c4b64c47ae5271fe262796e1459ff02baf132e2))
+* fix build resolve for vue jsx shim ([1f4518b](https://github.com/vuejs/vite/commit/1f4518b69b6d6d4afdb485570ed795fe4f557a77))
+
+
+
 ## [0.16.9](https://github.com/vuejs/vite/compare/v0.16.8...v0.16.9) (2020-05-23)
 
 

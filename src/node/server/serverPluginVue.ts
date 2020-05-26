@@ -13,10 +13,10 @@ import { resolveCompiler } from '../utils/resolveVue'
 import hash_sum from 'hash-sum'
 import LRUCache from 'lru-cache'
 import {
-  hmrClientId,
   debugHmr,
   importerMap,
-  ensureMapEntry
+  ensureMapEntry,
+  hmrClientPublicPath
 } from './serverPluginHmr'
 import {
   resolveFrom,
@@ -28,7 +28,7 @@ import { Context } from 'koa'
 import { transform } from '../esbuildService'
 import { InternalResolver } from '../resolver'
 import { seenUrls } from './serverPluginServeStatic'
-import { compileCss, rewriteCssUrls } from '../utils/cssUtils'
+import { codegenCss, compileCss, rewriteCssUrls } from '../utils/cssUtils'
 
 const debug = require('debug')('vite:sfc')
 const getEtag = require('etag')
@@ -114,6 +114,7 @@ export const vuePlugin: ServerPlugin = ({
       if (styleBlock.src) {
         filename = await resolveSrcImport(styleBlock, ctx, resolver)
       }
+      const id = hash_sum(publicPath)
       const result = await compileSFCStyle(
         root,
         styleBlock,
@@ -121,18 +122,146 @@ export const vuePlugin: ServerPlugin = ({
         filename,
         publicPath
       )
-      if (query.module != null) {
-        ctx.type = 'js'
-        ctx.body = `export default ${JSON.stringify(result.modules)}`
-      } else {
-        ctx.type = 'js'
-        ctx.body = `export default ${JSON.stringify(result.code)}`
-      }
+      ctx.type = 'js'
+      ctx.body = codegenCss(`${id}-${index}`, result.code, result.modules)
       return etagCacheCheck(ctx)
     }
 
     // TODO custom blocks
   })
+
+  const handleVueReload = (watcher.handleVueReload = async (
+    file: string,
+    timestamp: number = Date.now(),
+    content?: string
+  ) => {
+    const publicPath = resolver.fileToRequest(file)
+    const cacheEntry = vueCache.get(file)
+    const { send } = watcher
+
+    debugHmr(`busting Vue cache for ${file}`)
+    vueCache.del(file)
+
+    const descriptor = await parseSFC(root, file, content)
+    if (!descriptor) {
+      // read failed
+      return
+    }
+
+    const prevDescriptor = cacheEntry && cacheEntry.descriptor
+    if (!prevDescriptor) {
+      // the file has never been accessed yet
+      debugHmr(`no existing descriptor found for ${file}`)
+      return
+    }
+
+    // check which part of the file changed
+    let needRerender = false
+
+    const sendReload = () => {
+      send({
+        type: 'vue-reload',
+        path: publicPath,
+        timestamp
+      })
+      console.log(
+        chalk.green(`[vite:hmr] `) +
+          `${path.relative(root, file)} updated. (reload)`
+      )
+    }
+
+    if (!isEqualBlock(descriptor.script, prevDescriptor.script)) {
+      return sendReload()
+    }
+
+    if (!isEqualBlock(descriptor.template, prevDescriptor.template)) {
+      needRerender = true
+    }
+
+    let didUpdateStyle = false
+    const styleId = hash_sum(publicPath)
+    const prevStyles = prevDescriptor.styles || []
+    const nextStyles = descriptor.styles || []
+
+    // css modules update causes a reload because the $style object is changed
+    // and it may be used in JS. It also needs to trigger a vue-style-update
+    // event so the client busts the sw cache.
+    if (
+      prevStyles.some((s) => s.module != null) ||
+      nextStyles.some((s) => s.module != null)
+    ) {
+      return sendReload()
+    }
+
+    if (prevStyles.some((s) => s.scoped) !== nextStyles.some((s) => s.scoped)) {
+      needRerender = true
+    }
+
+    // only need to update styles if not reloading, since reload forces
+    // style updates as well.
+    nextStyles.forEach((_, i) => {
+      if (!prevStyles[i] || !isEqualBlock(prevStyles[i], nextStyles[i])) {
+        didUpdateStyle = true
+        send({
+          type: 'style-update',
+          path: `${publicPath}?type=style&index=${i}`,
+          timestamp
+        })
+      }
+    })
+
+    // stale styles always need to be removed
+    prevStyles.slice(nextStyles.length).forEach((_, i) => {
+      didUpdateStyle = true
+      send({
+        type: 'style-remove',
+        path: publicPath,
+        id: `${styleId}-${i + nextStyles.length}`,
+        timestamp
+      })
+    })
+
+    if (needRerender) {
+      send({
+        type: 'vue-rerender',
+        path: publicPath,
+        timestamp
+      })
+    }
+
+    let updateType = []
+    if (needRerender) {
+      updateType.push(`template`)
+    }
+    if (didUpdateStyle) {
+      updateType.push(`style`)
+    }
+    if (updateType.length) {
+      console.log(
+        chalk.green(`[vite:hmr] `) +
+          `${path.relative(root, file)} updated. (${updateType.join(' & ')})`
+      )
+    }
+  })
+
+  watcher.on('change', (file) => {
+    if (file.endsWith('.vue')) {
+      handleVueReload(file)
+    }
+  })
+}
+
+function isEqualBlock(a: SFCBlock | null, b: SFCBlock | null) {
+  if (!a && !b) return true
+  if (!a || !b) return false
+  if (a.content.length !== b.content.length) return false
+  if (a.content !== b.content) return false
+  const keysA = Object.keys(a.attrs)
+  const keysB = Object.keys(b.attrs)
+  if (keysA.length !== keysB.length) {
+    return false
+  }
+  return keysA.every((key) => a.attrs[key] === b.attrs[key])
 }
 
 async function resolveSrcImport(
@@ -219,7 +348,8 @@ async function compileSFCMain(
     return cached.script
   }
 
-  let code = ''
+  const id = hash_sum(publicPath)
+  let code = `\nimport { updateStyle } from "${hmrClientPublicPath}"\n`
   if (descriptor.script) {
     let content = descriptor.script.content
     if (descriptor.script.lang === 'ts') {
@@ -231,11 +361,9 @@ async function compileSFCMain(
     code += `const __script = {}`
   }
 
-  const id = hash_sum(publicPath)
   let hasScoped = false
   let hasCSSModules = false
   if (descriptor.styles) {
-    code += `\nimport { updateStyle } from "${hmrClientId}"\n`
     descriptor.styles.forEach((s, i) => {
       const styleRequest = publicPath + `?type=style&index=${i}`
       if (s.scoped) hasScoped = true
@@ -250,9 +378,9 @@ async function compileSFCMain(
           styleRequest + '&module'
         )}`
         code += `\n__cssModules[${JSON.stringify(moduleName)}] = ${styleVar}`
+      } else {
+        code += `\nimport ${JSON.stringify(styleRequest)}`
       }
-      code += `\nimport css_${i} from ${JSON.stringify(styleRequest)}`
-      code += `\nupdateStyle("${id}-${i}", css_${i})`
     })
     if (hasScoped) {
       code += `\n__script.__scopeId = "data-v-${id}"`
@@ -260,8 +388,9 @@ async function compileSFCMain(
   }
 
   if (descriptor.template) {
+    const templateRequest = publicPath + `?type=template`
     code += `\nimport { render as __render } from ${JSON.stringify(
-      publicPath + `?type=template`
+      templateRequest
     )}`
     code += `\n__script.render = __render`
   }

@@ -1,7 +1,7 @@
 import path from 'path'
 import fs from 'fs-extra'
 import chalk from 'chalk'
-import { DotenvParseOutput } from 'dotenv'
+import dotenv, { DotenvParseOutput } from 'dotenv'
 import { Options as RollupPluginVueOptions } from 'rollup-plugin-vue'
 import { CompilerOptions } from '@vue/compiler-sfc'
 import Rollup, {
@@ -16,6 +16,7 @@ import { Transform } from './transform'
 import { DepOptimizationOptions } from './depOptimizer'
 import { IKoaProxiesOptions } from 'koa-proxies'
 import { ServerOptions } from 'https'
+import { lookupFile } from './utils'
 
 export { Resolver, Transform }
 
@@ -84,9 +85,13 @@ export interface SharedConfig {
         fragment?: string
       }
   /**
-   * Environment variables .
+   * Environment variables
    */
   env?: DotenvParseOutput
+  /**
+   * Environment mode
+   */
+  mode?: string
 }
 
 export interface ServerConfig extends SharedConfig {
@@ -252,10 +257,18 @@ export interface Plugin
     | 'rollupOutputOptions'
   > {}
 
-export type ResolvedConfig = UserConfig & { __path?: string }
+export type ResolvedConfig = UserConfig & {
+  /**
+   * Path of config file.
+   */
+  __path?: string
+}
+
+const debug = require('debug')('vite:config')
 
 export async function resolveConfig(
-  configPath: string | undefined
+  mode: string,
+  configPath?: string
 ): Promise<ResolvedConfig | undefined> {
   const start = Date.now()
   const cwd = process.cwd()
@@ -333,19 +346,11 @@ export async function resolveConfig(
     }
 
     // load environment variables
-    const envConfigPath = path.resolve(cwd, '.env')
-    if (fs.existsSync(envConfigPath) && fs.statSync(envConfigPath).isFile()) {
-      const env = require('dotenv').config()
-      if (env.error) {
-        throw env.error
-      }
+    const env = loadEnv(mode, config.root || cwd)
+    debug(`env: %O`, env)
+    config.env = env
 
-      config.env = env.parsed
-    }
-
-    require('debug')('vite:config')(
-      `config resolved in ${Date.now() - start}ms`
-    )
+    debug(`config resolved in ${Date.now() - start}ms`)
 
     config.__path = resolvedPath
     return config
@@ -408,4 +413,31 @@ function resolvePlugin(config: UserConfig, plugin: Plugin): UserConfig {
       ...plugin.rollupOutputOptions
     }
   }
+}
+
+function loadEnv(mode: string, root: string): Record<string, string> {
+  debug(`env mode: ${mode}`)
+  const envFiles = [
+    /** default file */ `.env`,
+    /** local file */ `.env.local`,
+    /** mode file */ `.env.${mode}`,
+    /** mode local file */ `.env.${mode}.local`
+  ]
+
+  const env: Record<string, string> = {}
+  for (const file of envFiles) {
+    const path = lookupFile(root, [file], true)
+    if (path) {
+      const result = dotenv.config({
+        debug: !!process.env.DEBUG,
+        path
+      })
+      if (result.error) {
+        throw result.error
+      }
+      Object.assign(env, result.parsed)
+    }
+  }
+
+  return env
 }

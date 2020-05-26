@@ -1,31 +1,29 @@
+import { basename } from 'path'
 import { ServerPlugin } from '.'
-import { hmrClientId } from './serverPluginHmr'
 import hash_sum from 'hash-sum'
 import { Context } from 'koa'
 import { cleanUrl, isImportRequest, readBody } from '../utils'
 import { srcImportMap, vueCache } from './serverPluginVue'
 import {
+  codegenCss,
   compileCss,
   cssPreprocessLangRE,
   rewriteCssUrls
 } from '../utils/cssUtils'
 import qs from 'querystring'
 import chalk from 'chalk'
+import slash from 'slash'
 
 interface ProcessedEntry {
   css: string
   modules?: Record<string, string>
 }
 
+export const debugCSS = require('debug')('vite:css')
+
 const processedCSS = new Map<string, ProcessedEntry>()
 
-export const cssPlugin: ServerPlugin = ({
-  root,
-  app,
-  watcher,
-  resolver,
-  config
-}) => {
+export const cssPlugin: ServerPlugin = ({ root, app, watcher, resolver }) => {
   app.use(async (ctx, next) => {
     await next()
     // handle .css imports
@@ -34,38 +32,38 @@ export const cssPlugin: ServerPlugin = ({
       // note ctx.body could be null if upstream set status to 304
       ctx.body
     ) {
+      const id = JSON.stringify(hash_sum(ctx.path))
       if (isImportRequest(ctx)) {
         await processCss(root, ctx)
         // we rewrite css with `?import` to a js module that inserts a style
         // tag linking to the actual raw url
         ctx.type = 'js'
-        const id = JSON.stringify(hash_sum(ctx.path))
-        let code =
-          `import { updateStyle } from "${hmrClientId}"\n` +
-          `const css = ${JSON.stringify(processedCSS.get(ctx.path)!.css)}\n` +
-          `updateStyle(${id}, css)\n`
-        if (ctx.path.endsWith('.module.css')) {
-          code += `export default ${JSON.stringify(
-            processedCSS.get(ctx.path)!.modules
-          )}`
-        } else {
-          code += `export default css`
-        }
-        ctx.body = code.trim()
+        const { css, modules } = processedCSS.get(ctx.path)!
+        ctx.body = codegenCss(id, css, modules)
       } else {
         // raw request, return compiled css
         if (!processedCSS.has(ctx.path)) {
           await processCss(root, ctx)
         }
-        ctx.type = 'js'
-        ctx.body = `export default ${JSON.stringify(
-          processedCSS.get(ctx.path)!.css
-        )}`
+        ctx.type = 'css'
+        ctx.body = processedCSS.get(ctx.path)!.css
       }
     }
   })
 
   watcher.on('change', (file) => {
+    /** filter unused files */
+    if (
+      !Array.from(processedCSS.keys()).some((processed) =>
+        slash(file).includes(processed)
+      ) &&
+      !srcImportMap.has(file)
+    ) {
+      return debugCSS(
+        `${basename(file)} has changed, but it is not currently in use`
+      )
+    }
+
     if (file.endsWith('.css') || cssPreprocessLangRE.test(file)) {
       if (srcImportMap.has(file)) {
         // handle HMR for <style src="xxx.css">
@@ -78,10 +76,8 @@ export const cssPlugin: ServerPlugin = ({
           chalk.green(`[vite:hmr] `) + `${publicPath} updated. (style)`
         )
         watcher.send({
-          type: 'vue-style-update',
-          path: publicPath,
-          index: Number(index),
-          id: `${hash_sum(publicPath)}-${index}`,
+          type: 'style-update',
+          path: `${publicPath}?type=style&index=${index}`,
           timestamp: Date.now()
         })
         return
@@ -94,14 +90,12 @@ export const cssPlugin: ServerPlugin = ({
       }
 
       const publicPath = resolver.fileToRequest(file)
-      const id = hash_sum(publicPath)
 
       // bust process cache
       processedCSS.delete(publicPath)
 
       watcher.send({
         type: 'style-update',
-        id,
         path: publicPath,
         timestamp: Date.now()
       })

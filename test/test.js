@@ -92,11 +92,11 @@ describe('vite', () => {
 
     test('env variables', async () => {
       expect(await getText('.dev')).toMatch(`__DEV__: ${!isBuild}`)
-      expect(await getText('.base')).toMatch(`__BASE__: /`)
+      expect(await getText('.base')).toMatch(`process.env.BASE_URL: /`)
       expect(await getText('.node-env')).toMatch(
         `process.env.NODE_ENV: ${isBuild ? 'production' : 'development'}`
       )
-      expect(await getText('.customize-env-variable')).toMatch(
+      expect(await getText('.custom-env-variable')).toMatch(
         'process.env.CUSTOM_ENV_VARIABLE: 9527'
       )
     })
@@ -167,11 +167,12 @@ describe('vite', () => {
           'js module hot updated:  /testHmrManual.js'
         )
         expect(
-          browserLogs.slice(browserLogs.length - 7, browserLogs.length - 1)
+          browserLogs.slice(browserLogs.length - 8, browserLogs.length - 1)
         ).toEqual([
           // dispose for both dep and self
           `foo was: 2`,
           `(dep) foo was: 1`,
+          `(dep) foo from dispose: 10`,
           // self callbacks
           `(self-accepting)1.foo is now: 2`,
           `(self-accepting)2.foo is now: 2`,

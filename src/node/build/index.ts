@@ -116,7 +116,9 @@ export async function createBaseRollupPlugins(
       compilerOptions: options.vueCompilerOptions,
       cssModulesOptions: {
         generateScopedName: (local: string, filename: string) =>
-          `${local}_${hash_sum(filename)}`
+          `${local}_${hash_sum(filename)}`,
+        ...(options.rollupPluginVueOptions &&
+          options.rollupPluginVueOptions.cssModulesOptions)
       }
     }),
     require('@rollup/plugin-json')({
@@ -143,17 +145,13 @@ export async function createBaseRollupPlugins(
  * Bundles the app for production.
  * Returns a Promise containing the build result.
  */
-export async function build(options: BuildConfig = {}): Promise<BuildResult> {
+export async function build(options: BuildConfig): Promise<BuildResult> {
   if (options.ssr) {
     return ssrBuild({
       ...options,
       ssr: false // since ssrBuild calls build, this avoids an infinite loop.
     })
   }
-
-  const isTest = process.env.NODE_ENV === 'test'
-  process.env.NODE_ENV = 'production'
-  const start = Date.now()
 
   const {
     root = process.cwd(),
@@ -173,8 +171,13 @@ export async function build(options: BuildConfig = {}): Promise<BuildResult> {
     silent = false,
     sourcemap = false,
     shouldPreload = null,
-    env = {}
+    env = {},
+    mode = 'production'
   } = options
+
+  const isTest = process.env.NODE_ENV === 'test'
+  process.env.NODE_ENV = mode
+  const start = Date.now()
 
   let spinner: Ora | undefined
   const msg = 'Building for production...'
@@ -204,7 +207,7 @@ export async function build(options: BuildConfig = {}): Promise<BuildResult> {
 
   const basePlugins = await createBaseRollupPlugins(root, resolver, options)
 
-  env.NODE_ENV = 'production'
+  env.NODE_ENV = mode!
   const envReplacements = Object.keys(env).reduce((replacements, key) => {
     replacements[`process.env.${key}`] = JSON.stringify(env[key])
     return replacements
@@ -231,17 +234,20 @@ export async function build(options: BuildConfig = {}): Promise<BuildResult> {
         (id) => /\.(j|t)sx?$/.test(id),
         {
           ...envReplacements,
-          'process.env.': `({}).`
+          'process.env.BASE_URL': JSON.stringify(publicBasePath),
+          'process.env.': `({}).`,
+          'import.meta.hot': `false`
         },
         sourcemap
       ),
       // for vite spcific replacements, make sure to only apply them to
       // non-dependency code to avoid collision (e.g. #224 antd has __DEV__)
       createReplacePlugin(
-        (id) => !id.includes('node_modules') && /\.(j|t)sx?$/.test(id),
+        (id) =>
+          id.startsWith('/vite') ||
+          (!id.includes('node_modules') && /\.(j|t)sx?$/.test(id)),
         {
-          __DEV__: `false`,
-          __BASE__: JSON.stringify(publicBasePath)
+          __DEV__: `false`
         },
         sourcemap
       ),
@@ -379,9 +385,7 @@ export async function build(options: BuildConfig = {}): Promise<BuildResult> {
  * - Imports to dependencies are compiled into require() calls
  * - Templates are compiled with SSR specific optimizations.
  */
-export async function ssrBuild(
-  options: BuildConfig = {}
-): Promise<BuildResult> {
+export async function ssrBuild(options: BuildConfig): Promise<BuildResult> {
   const {
     rollupInputOptions,
     rollupOutputOptions,
