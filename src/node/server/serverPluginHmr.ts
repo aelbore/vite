@@ -26,7 +26,7 @@ import { vueCache, srcImportMap } from './serverPluginVue'
 import { resolveImport } from './serverPluginModuleRewrite'
 import { FSWatcher } from 'chokidar'
 import MagicString from 'magic-string'
-import { parse } from '@babel/parser'
+import { parse } from '../utils/babelParse'
 import { Node, StringLiteral, Statement, Expression } from '@babel/types'
 import { InternalResolver } from '../resolver'
 import LRUCache from 'lru-cache'
@@ -36,8 +36,12 @@ import { cssPreprocessLangRE } from '../utils/cssUtils'
 export const debugHmr = require('debug')('vite:hmr')
 
 export type HMRWatcher = FSWatcher & {
-  handleVueReload: (file: string, timestamp?: number, content?: string) => void
-  handleJSReload: (file: string, timestamp?: number) => void
+  handleVueReload: (
+    filePath: string,
+    timestamp?: number,
+    content?: string
+  ) => void
+  handleJSReload: (filePath: string, timestamp?: number) => void
   send: (payload: HMRPayload) => void
 }
 
@@ -214,7 +218,6 @@ function walkImportChain(
     return false
   }
 
-  let hasDeadEnd = false
   for (const importer of importers) {
     if (importer.endsWith('.vue') || isHmrAccepted(importer, importee)) {
       // vue boundaries are considered dirty for the reload
@@ -226,19 +229,21 @@ function walkImportChain(
     } else {
       const parentImpoters = importerMap.get(importer)
       if (!parentImpoters) {
-        hasDeadEnd = true
-      } else {
-        hasDeadEnd = walkImportChain(
+        return true
+      } else if (
+        walkImportChain(
           importer,
           parentImpoters,
           hmrBoundaries,
           dirtyFiles,
           currentChain.concat(importer)
         )
+      ) {
+        return true
       }
     }
   }
-  return hasDeadEnd
+  return false
 }
 
 function isHmrAccepted(importer: string, dep: string): boolean {
@@ -402,20 +407,7 @@ export function rewriteFileWithHMR(
     }
   }
 
-  const ast = parse(source, {
-    sourceType: 'module',
-    plugins: [
-      // required for import.meta.hot
-      'importMeta',
-      // by default we enable proposals slated for ES2020.
-      // full list at https://babeljs.io/docs/en/next/babel-parser#plugins
-      // this should be kept in async with @vue/compiler-core's support range
-      'bigInt',
-      'optionalChaining',
-      'nullishCoalescingOperator'
-    ]
-  }).program.body
-
+  const ast = parse(source)
   ast.forEach((s) => checkStatements(s, true, false))
 
   // inject import.meta.hot
