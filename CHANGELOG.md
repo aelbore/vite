@@ -1,3 +1,53 @@
+# [0.18.0](https://github.com/vuejs/vite/compare/v0.17.2...v0.18.0) (2020-05-28)
+
+
+### Bug Fixes
+
+* should apply full ext resolve on module entries ([63b0e3c](https://github.com/vuejs/vite/commit/63b0e3cca2975a180e8372882c4e8d9b513fc7cf))
+* should resolve env even without config file ([482bd34](https://github.com/vuejs/vite/commit/482bd3482687697d7092c0ae18fb699228a4cc5d)), closes [#290](https://github.com/vuejs/vite/issues/290)
+
+
+### Features
+
+* improve commonjs dependency handling ([2f071b3](https://github.com/vuejs/vite/commit/2f071b386175737f7e1146ba8154944ca2b7390a))
+* support aliasing directories ([801951e](https://github.com/vuejs/vite/commit/801951e28a92aaf7437647094081825ec308e645))
+
+
+### BREAKING CHANGES
+
+* The following config options have been removed:
+
+  - `rollupPluginCommonJSNamedExports`
+  - `optimizeDeps.commonJSWhitelist`
+
+  CommonJS deps are now optimized by default.
+
+
+
+## [0.17.2](https://github.com/vuejs/vite/compare/v0.17.1...v0.17.2) (2020-05-28)
+
+
+### Bug Fixes
+
+* compat for package entries without extension ([6269b7f](https://github.com/vuejs/vite/commit/6269b7f499c96bbe47fc1d8bce7fa77d115e1da6)), closes [#284](https://github.com/vuejs/vite/issues/284)
+* import.meta.hot should be injected before first `if (import.meta.hot)` ([#285](https://github.com/vuejs/vite/issues/285)) ([9ac63b1](https://github.com/vuejs/vite/commit/9ac63b1320ca929010a9cfd78e3c1a7797bd3a80))
+
+
+
+## [0.17.1](https://github.com/vuejs/vite/compare/v0.17.0...v0.17.1) (2020-05-27)
+
+
+### Bug Fixes
+
+* **hmr:** avoid fetching stale modules on nested hmr updates ([0554f06](https://github.com/vuejs/vite/commit/0554f063f6392fa49da0478fef68c80f10c391fc))
+* fix export default rewrite when at beginning of file ([3045112](https://github.com/vuejs/vite/commit/3045112780a8eeb5b8f455b82939cb00da1eef7d))
+* fix import chain walking ([9a44248](https://github.com/vuejs/vite/commit/9a4424822a8d3b3583504b827e1b7089b4319a30))
+* lazy require @vue/compiler-dom so it respects NODE_ENV ([e2594df](https://github.com/vuejs/vite/commit/e2594dffe42776cf8c53725d79525fb0b8b08d68))
+* remove query from resolved src import ([0330b2a](https://github.com/vuejs/vite/commit/0330b2a1f56ea8fa443207c524d817d7de772b56))
+* resolve full extension for SFC src imports ([ae6b49d](https://github.com/vuejs/vite/commit/ae6b49d5bd71a18f917d3a5e57ec3c4b9351da59))
+
+
+
 # [0.17.0](https://github.com/vuejs/vite/compare/v0.16.12...v0.17.0) (2020-05-26)
 
 

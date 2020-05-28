@@ -16,7 +16,7 @@ Still experimental, but we intend to make it suitable for production.
 ## Getting Started
 
 ```bash
-$ npx create-vite-app <project-name>
+$ npm init vite-app <project-name>
 $ cd <project-name>
 $ npm install
 $ npm run dev
@@ -31,7 +31,7 @@ $ yarn
 $ yarn dev
 ```
 
-> Although Vite is primarily designed to work with Vue 3, it can actually support other frameworks as well. For example, try `npx create-vite-app` with `--template react` or `--template preact`.
+> Although Vite is primarily designed to work with Vue 3, it can support other frameworks as well. For example, try `npm init vite-app --template react` or `--template preact`.
 
 ## Browser Support
 
@@ -53,6 +53,7 @@ Vite assumes you are targeting modern browsers and therefore does not perform an
 - [Config File](#config-file)
 - [Dev Server Proxy](#dev-server-proxy)
 - [Production Build](#production-build)
+- [Modes and Environment Variables](#modes-and-environment-variables)
 
 Vite tries to mirror the default configuration in [vue-cli](http://cli.vuejs.org/) as much as possible. If you've used `vue-cli` or other webpack-based boilerplates before, you should feel right at home. That said, do expect things to be different here and there.
 
@@ -226,17 +227,21 @@ Currently this is auto-importing a `jsx` compatible function that converts esbui
 
 #### JSX with React/Preact
 
-There are two other presets provided: `react` and `preact`. You can specify the preset by running Vite with `--jsx react` or `--jsx preact`. For the Preact preset, `h` is also auto injected so you don't need to manually import it.
+There are two other presets provided: `react` and `preact`. You can specify the preset by running Vite with `--jsx react` or `--jsx preact`.
 
-Because React doesn't ship ES module builds, you either need to use [es-react](https://github.com/lukejacksonn/es-react), or pre-bundle React into a ES module with Snowpack. Easiest way to get it running is:
+If you need a custom JSX pragma, JSX can also be customized via `--jsx-factory` and `--jsx-fragment` flags from the CLI or `jsx: { factory, fragment }` from the API. For example, you can run `vite --jsx-factory=h` to use `h` for JSX element creation calls. In the config (see [Config File](#config-file) below), it can be specified as:
 
 ```js
-import { React, ReactDOM } from 'https://unpkg.com/es-react'
-
-ReactDOM.render(<h1>Hello, what!</h1>, document.getElementById('app'))
+// vite.config.js
+module.exports = {
+  jsx: {
+    factory: 'h',
+    fragment: 'Fragment'
+  }
+}
 ```
 
-If you need a custom JSX pragma, JSX can also be customized via `--jsx-factory` and `--jsx-fragment` flags from the CLI or `jsx: { factory, fragment }` from the API. For example, you can run `vite --jsx-factory=h` to use `h` for JSX element creation calls.
+Note that for the Preact preset, `h` is also auto injected so you don't need to manually import it. However, this may cause issues if you are using `.tsx` with Preact since TS expects `h` to be explicitly imported for type inference. In that case, you can use the explicit factory config shown above which disables the auto `h` injection.
 
 ### Config File
 
@@ -275,6 +280,31 @@ Vite does utilize bundling for production builds, because native ES module impor
 You can run `vite build` to bundle the app.
 
 Internally, we use a highly opinionated Rollup config to generate the build. The build is configurable by passing on most options to Rollup - and most non-rollup string/boolean options have mapping flags in the CLI (see [build/index.ts](https://github.com/vuejs/vite/blob/master/src/node/build/index.ts) for full details).
+
+### Modes and Environment Variables
+
+> 0.16.7+
+
+The mode option is used to specify the value of `process.env.NODE_ENV` and the corresponding environment variables files that needs to be loaded.
+
+By default, there are two modes:
+  - `development` is used by `vite` and `vite serve`
+  - `production` is used by `vite build`
+
+You can overwrite the default mode used for a command by passing the `--mode` option flag. For example, if you want to use development variables in the build command:
+
+```bash
+vite build --mode development
+```
+
+When running `vite`, environment variables are loaded from the following files in your project root:
+
+```
+.env                # loaded in all cases
+.env.local          # loaded in all cases, ignored by git
+.env.[mode]         # only loaded in specified env mode
+.env.[mode].local   # only loaded in specified env mode, ignored by git
+```
 
 ## API
 

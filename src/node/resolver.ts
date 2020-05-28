@@ -3,9 +3,9 @@ import path from 'path'
 import slash from 'slash'
 import { cleanUrl, resolveFrom, queryRE } from './utils'
 import {
-  idToFileMap,
   moduleRE,
-  fileToRequestMap
+  moduleIdToFileMap,
+  moduleFileToIdMap
 } from './server/serverPluginModuleResolve'
 import { resolveOptimizedCacheDir } from './depOptimizer'
 import chalk from 'chalk'
@@ -15,21 +15,23 @@ const debug = require('debug')('vite:resolve')
 export interface Resolver {
   requestToFile?(publicPath: string, root: string): string | undefined
   fileToRequest?(filePath: string, root: string): string | undefined
-  alias?(id: string): string | undefined
+  alias?: ((id: string) => string | undefined) | Record<string, string>
 }
 
 export interface InternalResolver {
   requestToFile(publicPath: string): string
   fileToRequest(filePath: string): string
   alias(id: string): string | undefined
+  resolveExt(publicPath: string): string | undefined
 }
 
 export const supportedExts = ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json']
+export const mainFields = ['module', 'jsnext', 'jsnext:main', 'browser', 'main']
 
 const defaultRequestToFile = (publicPath: string, root: string): string => {
   if (moduleRE.test(publicPath)) {
     const id = publicPath.replace(moduleRE, '')
-    const cachedNodeModule = idToFileMap.get(id)
+    const cachedNodeModule = moduleIdToFileMap.get(id)
     if (cachedNodeModule) {
       return cachedNodeModule
     }
@@ -41,7 +43,7 @@ const defaultRequestToFile = (publicPath: string, root: string): string => {
     // try to resolve from normal node_modules
     const nodeModule = resolveNodeModuleFile(root, id)
     if (nodeModule) {
-      idToFileMap.set(id, nodeModule)
+      moduleIdToFileMap.set(id, nodeModule)
       return nodeModule
     }
   }
@@ -53,7 +55,7 @@ const defaultRequestToFile = (publicPath: string, root: string): string => {
 }
 
 const defaultFileToRequest = (filePath: string, root: string): string => {
-  const moduleRequest = fileToRequestMap.get(filePath)
+  const moduleRequest = moduleFileToIdMap.get(filePath)
   if (moduleRequest) {
     return moduleRequest
   }
@@ -68,7 +70,7 @@ const isFile = (file: string): boolean => {
   }
 }
 
-export const resolveExt = (id: string) => {
+const resolveExt = (id: string): string | undefined => {
   const cleanId = cleanUrl(id)
   if (!isFile(cleanId)) {
     let inferredExt = ''
@@ -87,47 +89,121 @@ export const resolveExt = (id: string) => {
     const resolved = cleanId + inferredExt + query
     if (resolved !== id) {
       debug(`(extension) ${id} -> ${resolved}`)
+      return inferredExt
     }
-    return resolved
   }
-  return id
 }
+
+const isDir = (p: string) => fs.existsSync(p) && fs.statSync(p).isDirectory()
 
 export function createResolver(
   root: string,
   resolvers: Resolver[] = [],
-  alias: Record<string, string> = {}
+  userAlias: Record<string, string> = {}
 ): InternalResolver {
-  return {
-    requestToFile: (publicPath) => {
-      let resolved: string | undefined
-      for (const r of resolvers) {
-        const filepath = r.requestToFile && r.requestToFile(publicPath, root)
-        if (filepath) {
-          resolved = filepath
-          break
+  resolvers = [...resolvers]
+  const literalAlias: Record<string, string> = {}
+
+  const resolveAlias = (alias: Record<string, string>) => {
+    for (const key in alias) {
+      let target = alias[key]
+      // aliasing a directory
+      if (key.startsWith('/') && key.endsWith('/') && path.isAbsolute(target)) {
+        // check first if this is aliasing to a path from root
+        const fromRoot = path.join(root, target)
+        if (isDir(fromRoot)) {
+          target = fromRoot
+        } else if (!isDir(target)) {
+          continue
         }
+        resolvers.push({
+          requestToFile(publicPath) {
+            if (publicPath.startsWith(key)) {
+              return path.join(target, publicPath.slice(key.length))
+            }
+          },
+          fileToRequest(filePath) {
+            if (filePath.startsWith(target)) {
+              return slash(key + path.relative(target, filePath))
+            }
+          }
+        })
+      } else {
+        literalAlias[key] = target
       }
-      if (!resolved) {
-        resolved = defaultRequestToFile(publicPath, root)
+    }
+  }
+
+  resolvers.forEach((r) => {
+    if (r.alias && typeof r.alias === 'object') {
+      resolveAlias(r.alias)
+    }
+  })
+  resolveAlias(userAlias)
+
+  const requestToFileCache = new Map()
+  const fileToRequestCache = new Map()
+
+  const resolveRequest = (
+    publicPath: string
+  ): {
+    filePath: string
+    ext: string | undefined
+  } => {
+    if (requestToFileCache.has(publicPath)) {
+      return requestToFileCache.get(publicPath)
+    }
+
+    let resolved: string | undefined
+    for (const r of resolvers) {
+      const filepath = r.requestToFile && r.requestToFile(publicPath, root)
+      if (filepath) {
+        resolved = filepath
+        break
       }
-      resolved = resolveExt(resolved)
-      return resolved
+    }
+    if (!resolved) {
+      resolved = defaultRequestToFile(publicPath, root)
+    }
+    const ext = resolveExt(resolved)
+    const result = {
+      filePath: ext ? resolved + ext : resolved,
+      ext
+    }
+    requestToFileCache.set(publicPath, result)
+    return result
+  }
+
+  return {
+    requestToFile(publicPath) {
+      return resolveRequest(publicPath).filePath
     },
-    fileToRequest: (filePath) => {
+
+    resolveExt(publicPath) {
+      return resolveRequest(publicPath).ext
+    },
+
+    fileToRequest(filePath) {
+      if (fileToRequestCache.has(filePath)) {
+        return fileToRequestCache.get(filePath)
+      }
       for (const r of resolvers) {
         const request = r.fileToRequest && r.fileToRequest(filePath, root)
         if (request) return request
       }
-      return defaultFileToRequest(filePath, root)
+      const res = defaultFileToRequest(filePath, root)
+      fileToRequestCache.set(filePath, res)
+      return res
     },
-    alias: (id: string) => {
-      let aliased: string | undefined = alias[id]
+
+    alias(id) {
+      let aliased: string | undefined = literalAlias[id]
       if (aliased) {
         return aliased
       }
       for (const r of resolvers) {
-        aliased = r.alias && r.alias(id)
+        aliased =
+          r.alias && typeof r.alias === 'function' ? r.alias(id) : undefined
         if (aliased) {
           return aliased
         }
@@ -243,7 +319,7 @@ export function resolveNodeModule(
     } catch (e) {
       return
     }
-    let entryPoint: string | undefined
+    let entryPoint: string | null = null
     if (pkg.exports) {
       if (typeof pkg.exports === 'string') {
         entryPoint = pkg.exports
@@ -256,7 +332,12 @@ export function resolveNodeModule(
       }
     }
     if (!entryPoint) {
-      entryPoint = pkg.module || pkg.main || null
+      for (const field of mainFields) {
+        if (pkg[field]) {
+          entryPoint = pkg[field]
+          break
+        }
+      }
     }
 
     debug(`(node_module entry) ${id} -> ${entryPoint}`)
@@ -267,7 +348,13 @@ export function resolveNodeModule(
     // be passed to resolveNodeModuleFile().
     let entryFilePath: string | null = null
     if (entryPoint) {
+      // #284 some packages specify entry without extension...
       entryFilePath = path.join(path.dirname(pkgPath), entryPoint!)
+      const ext = resolveExt(entryFilePath)
+      if (ext) {
+        entryPoint += ext
+        entryFilePath += ext
+      }
       entryPoint = path.posix.join(id, entryPoint!)
       // save the resolved file path now so we don't need to do it again in
       // resolveNodeModuleFile()

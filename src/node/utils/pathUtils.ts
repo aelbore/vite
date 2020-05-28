@@ -9,7 +9,7 @@ export const resolveFrom = (root: string, id: string) =>
   resolve.sync(id, { basedir: root, extensions: supportedExts })
 
 export const queryRE = /\?.*$/
-export const hashRE = /\#.*$/
+export const hashRE = /#.*$/
 
 export const cleanUrl = (url: string) =>
   url.replace(hashRE, '').replace(queryRE, '')
@@ -18,8 +18,8 @@ export const resolveRelativeRequest = (importer: string, id: string) => {
   const resolved = slash(path.posix.resolve(path.dirname(importer), id))
   const queryMatch = id.match(queryRE)
   return {
-    url: resolved,
-    pathname: cleanUrl(resolved),
+    // path resovle strips ending / which should be preserved
+    pathname: cleanUrl(resolved) + (id.endsWith('/') ? '/' : ''),
     query: queryMatch ? queryMatch[0] : ''
   }
 }
